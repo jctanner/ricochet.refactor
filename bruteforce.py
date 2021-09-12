@@ -34,6 +34,15 @@ def get_distance(a, b):
     return dist
 
 
+def distance_to_blocks(distance):
+    block_width = 589 / 16
+    #blocks = math.ceil(distance / 60)
+    #blocks = round(distance / 60)
+    #blocks = round(distance / block_width)
+    blocks = math.ceil(distance / block_width)
+    return blocks
+
+
 def is_opposite_direction(a,b):
 
     if sorted([a, b]) == ['left', 'right']:
@@ -79,7 +88,6 @@ def get_style_key(em, key):
     return sdict[key]
 
 
-
 class Robot:
 
     def __init__(self, driver, container):
@@ -113,9 +121,10 @@ class Robot:
     @property
     def arrows(self):
         arrows = {}
-        for div in self.container.find_elements_by_class_name('arrow'):
-            arrow = Arrow(self.driver, div, self)
+        for adiv in self.container.find_elements_by_class_name('arrow'):
+            arrow = Arrow(self.driver, adiv, self)
             arrows[arrow.direction] = arrow
+            # print(f'ARROW: {arrow.direction}')
         return arrows
 
 
@@ -145,6 +154,10 @@ class Arrow(Robot):
 
         sdict = get_style_map(self.container)
 
+        # if blocked, the line is not displayed ...
+        if 'display' in sdict and sdict['display'] == 'none':
+            return 0
+
         # invalid direction?
         if 'width' not in sdict or 'height' not in sdict:
             return 0
@@ -154,7 +167,9 @@ class Arrow(Robot):
             abs(int(sdict['height'].replace('px', '')))
         ]
 
-        print(f'{self.direction} = {max(vals)}d ... {self.top},{self.left}')
+        distance = max(vals)
+        blocks = distance_to_blocks(distance)
+        print(f'{self.parent.color} {self.container.id} {self.direction} = {distance}d ... t{self.top},l{self.left} ... {blocks} blocks')
 
         return max(vals)
 
@@ -199,157 +214,84 @@ class RobotRebaser:
         self.driver.get(URL)
         time.sleep(2)
         canvas = self.driver.find_element_by_tag_name('canvas')
+        canvas.screenshot('/tmp/canvas.png')
         self._width = int(canvas.get_attribute('width'))
         self._height = int(canvas.get_attribute('height'))
 
         robots = self.robots
         goal = self.goal
 
-    def force_one_color(self):
-
-        path = []
-        color = self.goal.color
-        vmap = {}
-        last_coord = None
-        last_direction = None
-        last_dest = None
-        invalid = None
-
-        coord = None
-        visited = set()
-        visited.add(self.robots[color].coord)
-
-        #
-
-        # where the robot actually goes based on arrow coords
-        arrow_position_map = {}
-
-        while True:
-            print(f'VISITED: {visited}')
-            print(f'CURRENTLY AT {self.robots[color].coord}')
-            print(f'GOAL AT {self.goal.coord}')
-            #print(f'PATH: {path}')
-
-            if last_coord:
-                traveled = get_distance(last_coord, self.robots[color].coord)
-                print(f'TRAVELED: {traveled}')
-                if traveled == 0.0:
-                    invalid = last_direction
-
-
-            # don't keep going nowhere
-            if invalid is None:
-                if last_direction and last_coord and self.robots[color].coord:
-                    invalid = last_direction
-                else:
-                    invalid = None
-
-            #print('click on the color')
-            self.robots[color].click()
-
-            #if self.robots[color].coord == coord:
-            #    import epdb; epdb.st()
-
-            coord = self.robots[color].coord
-            last_coord = self.robots[color].coord
-            if last_dest is not None:
-                arrow_position_map[last_dest] = coord
-
-            #if path and path[-1] == coord:
-            #    self.redo_button.click()
-            #    continue
-
-            path.append(coord)
-            visited.add(coord)
-
-            distances = [(
-                x.distance,
-                x.coord,
-                x.direction
-            ) for x in self.robots[color].arrows.values()]
-
-
-            '''
-            ds = sorted([x[0] for x in distances])
-            if sorted(set(ds)) != ds:
-                import epdb; epdb.st()
-            '''
-
-            if self.goal.coord in [x[1] for x in distances]:
-                print('I WIN!!!')
-                distances = [x for x in distances if x[1] == self.goal.coord]
-                self.robots[color].arrows[dmax[2]].click()
-                break
-                #import epdb; epdb.st()
-
-            '''
-            # eliminate any directions that take us to a previous point ...
-            distances = [x for x in distances if x[1] not in visited]
-            distances = [x for x in distances if x[1] != self.robots[color].coord]
-            distances = [x for x in distances if x[1] not in vmap]
-            '''
-
-            # don't go to the same place
-            distances = [x for x in distances if x[1] not in arrow_position_map]
-
-            # don't go to the bad place
-            if invalid:
-                distances = [x for x in distances if x[2] != invalid]
-
-            # don't go back and forth
-            if last_direction is not None:
-                distances = [x for x in distances if not is_opposite_direction(last_direction, x[2])]
-
-            if not distances:
-                print("NO WHERE TO GO 1!!!")
-                break
-
-            maxd = max([x[0] for x in distances])
-            if len([x for x in distances if x[0] == maxd]) > 1:
-                chosen = random.choice(distances)
-                distances = [chosen]
-
-            # stop if no place left to go
-            if not distances:
-                print("NO WHERE TO GO 2!!!")
-                break
-
-            pprint(distances)
-            dmax = max(distances)
-            last_dest = dmax[1]
-
-            #print('click on the color')
-            #self.robots[color].click()
-            time.sleep(.2)
-            print(f'going {dmax[2]} to {dmax[1]}')
-
-            #self.robots[color].arrows[dmax[2]].click()
-            #visited.add(dmax[1])
-            
-            last_direction = dmax[2]
-            try:
-                self.robots[color].arrows[dmax[2]].click()
-                #last_direction = dmax[2]
-                visited.add(dmax[1])
-                vmap[dmax[1]] = self.robots[color].coord
-            except Exception as e:
-                continue
-
-            time.sleep(.2)
-            #visited.add(self.robots[color].coord)
-
-
-        print("ARE WE DONE!?")
+    def is_blocked(self, robot, direction, coord):
+        # does this direction hit a wall?
+        if robot.arrows['up'].distance <= 0:
+            return True
+        
         import epdb; epdb.st()
 
 
+    def force_one_color(self):
+
+        color = self.goal.color
+        this_coord = self.robots[color].coord
+        last_direction = None
+
+        visited = set()
+        visits_by_destination = {}
+
+        while True:
+
+            self.robots[color].click()
+            print(f'current location: {self.robots[color].coord}')
+
+            # map out the distances of all possible directions
+            distances = [(
+                x.distance,
+                distance_to_blocks(x.distance),
+                x.coord,
+                x.direction
+            ) for x in self.robots[color].arrows.values()]
+            pprint(distances)
+
+            # don't go backwards
+            if last_direction:
+                distances = [x for x in distances if not is_opposite_direction(last_direction, x[-1])]
+            
+            # don't go back to previously visited spots
+           
+            maxd = max([x[0] for x in distances])
+            togo = [x for x in distances if x[0] == maxd]
+            desired_direction = togo[0][-1]
+            desired_destination = togo[0][-2]
+
+            print(f'attempting to go {desired_direction}')
+            #import epdb; epdb.st()
+            try:
+                self.robots[color].arrows[desired_direction].click()
+                last_direction = desired_direction
+            except Exception as e:
+                print(e)
+                import epdb; epdb.st()
+            
+            if self.goal.color != color:
+                print('Goal color changed. Guess we found the spot?')
+                break
+
+            if self.robots[color].coord == self.goal.coord:
+                print('Seems that we got to the goal?')
+                break
+
+            visited.add(self.robots[color].coord)
+            visits_by_destination[desired_destination] = self.robots[color].coord
+            #import epdb; epdb.st()
 
 
 
 def main():
     rr = RobotRebaser()
     rr.reload()
-    rr.force_one_color()
+
+    while True:
+        rr.force_one_color()
 
 
 if __name__ == "__main__":
