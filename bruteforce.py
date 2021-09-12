@@ -20,6 +20,10 @@ RGB_MAP = {
 }
 
 
+class NoSpotsLeft(Exception):
+    pass
+
+
 
 def get_distance(a, b):
     # https://www.w3resource.com/python-exercises/python-basic-exercise-40.php
@@ -229,6 +233,7 @@ class RobotRebaser:
         import epdb; epdb.st()
 
 
+
     def force_one_color(self):
 
         color = self.goal.color
@@ -238,11 +243,8 @@ class RobotRebaser:
         visited = set()
         visits_by_destination = {}
 
-        while True:
 
-            self.robots[color].click()
-            print(f'current location: {self.robots[color].coord}')
-
+        def random_path():
             # map out the distances of all possible directions
             distances = [(
                 x.distance,
@@ -252,14 +254,133 @@ class RobotRebaser:
             ) for x in self.robots[color].arrows.values()]
             pprint(distances)
 
+            for x in distances:
+                if x[2] == self.goal.coord:
+                    return x
+
             # don't go backwards
             if last_direction:
                 distances = [x for x in distances if not is_opposite_direction(last_direction, x[-1])]
             
+            # avoid collisions
+            distances = [x for x in distances if x[1] > 0]
+            
             # don't go back to previously visited spots
+            dcoords = [x[2] for x in distances]
+            dcoords_unvisited = [x for x in dcoords if x not in visits_by_destination]
+            if not dcoords_unvisited:
+                print('We ran out of places to go and are circling! (1)')
+                raise NoSpotsLeft
+           
+            maxd = random.choice([x[0] for x in distances])
+
+            togo = [x for x in distances if x[0] == maxd]
+            return togo 
+
+        def longest_path():
+            # map out the distances of all possible directions
+            distances = [(
+                x.distance,
+                distance_to_blocks(x.distance),
+                x.coord,
+                x.direction
+            ) for x in self.robots[color].arrows.values()]
+            pprint(distances)
+
+            for x in distances:
+                if x[2] == self.goal.coord:
+                    return x
+
+            # don't go backwards
+            if last_direction:
+                distances = [x for x in distances if not is_opposite_direction(last_direction, x[-1])]
+            
+            # avoid collisions
+            distances = [x for x in distances if x[1] > 0]
+            
+            # don't go back to previously visited spots
+            dcoords = [x[2] for x in distances]
+            dcoords_unvisited = [x for x in dcoords if x not in visits_by_destination]
+            if not dcoords_unvisited:
+                print('We ran out of places to go and are circling! (1)')
+                raise NoSpotsLeft
            
             maxd = max([x[0] for x in distances])
+            #maxd = min([x[0] for x in distances])
+
             togo = [x for x in distances if x[0] == maxd]
+            return togo            
+
+        def nearest_to_goal():
+            # map out the distance to the goal for all possible directions
+            distances = [(
+                get_distance(x.coord, self.goal.coord),
+                x.distance,
+                x.coord,
+                x.direction
+            ) for x in self.robots[color].arrows.values()]
+            pprint(distances)            
+
+            for x in distances:
+                if x[2] == self.goal.coord:
+                    return x
+
+            # don't go backwards
+            if last_direction:
+                distances = [x for x in distances if not is_opposite_direction(last_direction, x[-1])]
+            
+            # avoid collisions
+            distances = [x for x in distances if x[1] > 0]
+            
+            # don't go back to previously visited spots
+            dcoords = [x[2] for x in distances]
+            dcoords_unvisited = [x for x in dcoords if x not in visits_by_destination]
+            if not dcoords_unvisited:
+                print('We ran out of places to go and are circling! (2)')
+                raise NoSpotsLeft
+           
+            #maxd = max([x[0] for x in distances])
+            maxd = min([x[0] for x in distances])
+
+            togo = [x for x in distances if x[0] == maxd]
+            return togo
+
+        strategies = ['nearest_to_goal()', 'longest_path()', 'random_path()']
+        strategy = random.choice(strategies)
+
+        while True:
+
+            print(f'VISITED COUNT: {len(list(visited))}')
+
+            if len(list(visited)) > 20:
+                strategy = random.choice(strategies)
+                self.redo_button.click()
+                visited = set()
+                visits_by_destination = {}
+                #import epdb; epdb.st()
+
+            self.robots[color].click()
+            print(f'current location: {self.robots[color].coord}')
+
+            #togo = nearest_to_goal()
+            try:
+                togo = eval(strategy)
+            except NoSpotsLeft as e:
+                break
+
+                '''
+                #strategy = 'longest_path()'
+                strategy = random.choice(strategies)
+                visited = set()
+                visits_by_destination = {}
+
+                try:
+                    togo = eval(strategy)
+                except NoSpotsLeft as e:
+                    self.redo_button.click()
+                    break
+                '''
+
             desired_direction = togo[0][-1]
             desired_destination = togo[0][-2]
 
@@ -279,6 +400,11 @@ class RobotRebaser:
             if self.robots[color].coord == self.goal.coord:
                 print('Seems that we got to the goal?')
                 break
+        
+            if self.robots[color].coord in visited:
+                print('We are stuck!')
+                self.redo_button.click()
+                break
 
             visited.add(self.robots[color].coord)
             visits_by_destination[desired_destination] = self.robots[color].coord
@@ -292,6 +418,12 @@ def main():
 
     while True:
         rr.force_one_color()
+        rr.redo_button.click()
+        #import epdb; epdb.st()
+        time.sleep(3)
+        print('####################################################')
+        print('STARTING NEW CYCLE ...')
+        print('####################################################')
 
 
 if __name__ == "__main__":
