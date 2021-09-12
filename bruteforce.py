@@ -158,28 +158,6 @@ class Arrow(Robot):
 
         return max(vals)
 
-        '''
-        x2 = int(sdict['left'].replace('px', ''))
-        y2 = int(sdict['top'].replace('px', ''))
-
-        x1 = self.parent.left
-        y1 = self.parent.top
-
-        # https://www.w3resource.com/python-exercises/python-basic-exercise-40.php
-        #p1 = [4, 0]
-        #p2 = [6, 6]
-        #math.sqrt( ((p1[0]-p2[0])**2)+((p1[1]-p2[1])**2) )
-        dist = math.sqrt(
-            ((x2 - x1) ** 2)
-            +
-            ((y2 - y1) ** 2)
-        )
-
-        print(f'{self.direction}: {x1},{y1} to {x2},{y2} = {dist}')
-
-        return dist
-        '''
-
 
 class RobotRebaser:
 
